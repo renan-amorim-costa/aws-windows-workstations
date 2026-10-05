@@ -1,0 +1,110 @@
+<powershell>
+# First boot of a workstation. Each step is appended to C:\boot-report.txt and
+# to the status page (IIS, port 80). The $${...} values come from Terraform.
+
+$ProgressPreference = "SilentlyContinue"  # PowerShell 5.1 downloads crawl with it on
+$work   = "C:\Windows\Temp\installers"
+$report = "C:\boot-report.txt"
+New-Item -ItemType Directory -Force $work | Out-Null
+$steps = New-Object System.Collections.ArrayList
+
+function Report($line) {
+  [void]$steps.Add($line)
+  $line | Out-File $report -Append -Encoding utf8
+  $page = "<h1>Workstation ${name}</h1><p>" + $env:COMPUTERNAME + "</p><hr>" + ($steps -join "<br>")
+  New-Item -ItemType Directory -Force C:\inetpub\wwwroot | Out-Null
+  Set-Content -Path C:\inetpub\wwwroot\index.html -Value $page -Encoding UTF8
+}
+
+function Find-Installed($pattern) {
+  Get-ItemProperty @(
+      "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+      "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+    ) -ErrorAction SilentlyContinue |
+    Where-Object { $_.DisplayName -match $pattern } | Select-Object -First 1
+}
+
+# 15 min limit: an installer waiting for a click would hang the boot forever.
+function Invoke-Installer($label, $file, $arguments, $pattern) {
+  if ($file -like "*.msi") {
+    $p = Start-Process msiexec.exe -ArgumentList (@("/i", $file) + $arguments) -PassThru
+  } else {
+    $p = Start-Process $file -ArgumentList $arguments -PassThru
+  }
+  $null = $p.Handle  # keeps ExitCode readable after the process ends
+  if (-not $p.WaitForExit(15 * 60 * 1000)) {
+    $p.Kill()
+    Report ("{0,-24} NOT installed (still running after 15 min - probably waiting for a click)" -f $label)
+    return
+  }
+  $found = Find-Installed $pattern
+  if ($found) {
+    Report ("{0,-24} installed: {1} {2}" -f $label, $found.DisplayName, $found.DisplayVersion)
+  } else {
+    Report ("{0,-24} NOT installed (exit {1}, nothing registered)" -f $label, $p.ExitCode)
+  }
+}
+
+# ---- 1. Status page -----------------------------------------------------------
+try {
+  Install-WindowsFeature -Name Web-Server | Out-Null
+  Report "Status page              ready on port 80"
+} catch {
+  Report ("Status page              FAILED ({0})" -f $_.Exception.Message)
+}
+
+# ---- 2. Apps, runtimes first, from the catalog bucket (instance profile) ------
+$installs = @(
+%{ for i in installs ~}
+  @{ label = "${i.label}"; key = "${i.key}"; args = @(${i.args}); pattern = "${i.registry}" }
+%{ endfor ~}
+)
+foreach ($i in $installs) {
+  try {
+    $file = Join-Path $work (Split-Path $i.key -Leaf)
+    Read-S3Object -BucketName "${bucket}" -Key $i.key -File $file -Region "${region}" | Out-Null
+    Invoke-Installer $i.label $file $i.args $i.pattern
+  } catch {
+    Report ("{0,-24} NOT installed ({1})" -f $i.label, $_.Exception.Message)
+  }
+}
+%{ if configure_dbeaver ~}
+
+# ---- 3. DBeaver: drivers and connections ready ----------------------------------
+$dbeaver = Find-Installed "^DBeaver"
+if ($dbeaver) {
+  $exe = Join-Path $dbeaver.InstallLocation "dbeaver.exe"
+  $link = (New-Object -ComObject WScript.Shell).CreateShortcut("C:\Users\Public\Desktop\DBeaver.lnk")
+  $link.TargetPath = $exe
+  $link.Save()
+
+  # Without this, DBeaver's Java rejects the Maven certificate and JDBC driver
+  # downloads fail with "PKIX path building failed".
+  $ini = Join-Path $dbeaver.InstallLocation "dbeaver.ini"
+  (Get-Content $ini) + "-Djavax.net.ssl.trustStoreType=WINDOWS-ROOT" | Set-Content $ini -Encoding ASCII
+
+  # Assumption, not proven: Windows stores a root certificate only after first
+  # use, so this request stores Maven's before DBeaver's Java looks for it.
+  try { Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/" -UseBasicParsing | Out-Null } catch { }
+
+  # Default = template for new users. WriteAllText keeps the JSON free of a BOM.
+  $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("${dbeaver_config_b64}"))
+  foreach ($userProfile in @("Default", "Administrator")) {
+    $dir = "C:\Users\$userProfile\AppData\Roaming\DBeaverData\workspace6\General\.dbeaver"
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    [IO.File]::WriteAllText("$dir\data-sources.json", $json, (New-Object Text.UTF8Encoding $false))
+  }
+  Report "DBeaver                  configured: desktop shortcut, drivers, connections"
+} else {
+  Report "DBeaver                  NOT configured (not installed)"
+}
+%{ endif ~}
+
+# ---- 4. Database reachability ---------------------------------------------------
+%{ for engine, db in databases ~}
+$r = Test-NetConnection "${db.host}" -Port ${db.port} -WarningAction SilentlyContinue
+Report ("{0,-24} {1}:{2} reachable={3}" -f "${engine}", "${db.host}", ${db.port}, $r.TcpTestSucceeded)
+%{ endfor ~}
+
+Report "FINISHED                 $(Get-Date -Format s)"
+</powershell>

@@ -1,0 +1,44 @@
+# Jenkins Configuration as Code: the whole Jenkins is described here.
+# Deleting the volume and starting again gives back exactly the same Jenkins.
+
+jenkins:
+  systemMessage: "On-demand Windows workstations"
+  numExecutors: 2
+  mode: NORMAL
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_USER}"
+          password: "${JENKINS_ADMIN_PASS}"
+
+  authorizationStrategy:
+    globalMatrix:
+      entries:
+        - user:
+            name: "${JENKINS_ADMIN_USER}"
+            permissions:
+              - "Overall/Administer"
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+
+jobs:
+  - script: >
+      pipelineJob('workstation') {
+        description('Creates or destroys an on-demand Windows workstation')
+        definition {
+          cpsScm {
+            scm {
+              git {
+                remote { url('file:///repo') }
+                branch('*/main')
+              }
+            }
+            scriptPath('Jenkinsfile')
+            lightweight(false)
+          }
+        }
+      }

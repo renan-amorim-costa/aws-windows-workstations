@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+tfplan
+*.tfplan
+
+# Local configuration - copy from the matching .example file
+*.tfvars
+backend.hcl
+jenkins/.env
+
+# Installers go to S3, never to Git
+installers/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+# Line endings are declared, not inherited from the operating system.
+#
+# The boot script becomes the instance user_data, and AWS compares its hash
+# to decide whether to replace the instance. Without this file, an apply from
+# Linux (LF) and another from Windows (CRLF) produce different hashes and the
+# workstation is recreated for no real change.
+
+*            text=auto eol=lf
+*.tf         text eol=lf
+*.tftpl      text eol=lf
+*.hcl        text eol=lf
+Jenkinsfile  text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+Dockerfile   text eol=lf
+
+# PowerShell run on Windows keeps its native line ending.
+*.ps1        text eol=crlf
+
+*.exe        binary
+*.msi        binary
+*.zip        binary

@@ -1,0 +1,33 @@
+# docker compose up -d --build     start
+# docker compose logs -f jenkins   follow
+# docker compose down              stop (the volume survives)
+#
+# Values come from .env next to this file (see .env.example), which Git ignores.
+
+services:
+  jenkins:
+    build: .
+    container_name: workstations-jenkins
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+
+    environment:
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER}
+      JENKINS_ADMIN_PASS: ${JENKINS_ADMIN_PASS}
+      AWS_PROFILE: ${AWS_PROFILE}
+      AWS_REGION: ${AWS_REGION}
+      TF_STATE_BUCKET: ${TF_STATE_BUCKET}
+      CATALOG_BUCKET: ${CATALOG_BUCKET}
+      KEY_NAME: ${KEY_NAME}
+
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./casc.yaml:/var/jenkins_conf/casc.yaml:ro
+      # The repository, read-only: Jenkins clones it into its own workspace.
+      - ..:/repo:ro
+      # Local AWS credentials, read-only. A Jenkins in AWS would use an IAM role.
+      - ${AWS_DIR}:/var/jenkins_home/.aws:ro
+
+volumes:
+  jenkins_home:

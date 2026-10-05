@@ -1,0 +1,8 @@
+configuration-as-code
+workflow-aggregator
+git
+job-dsl
+matrix-auth
+pipeline-stage-view
+ansicolor
+timestamper

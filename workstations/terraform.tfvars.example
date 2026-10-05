@@ -1,0 +1,28 @@
+# Copy to terraform.tfvars and fill in.
+
+catalog_bucket = "workstations-catalog-123456789012" # output "bucket" of catalog/
+key_name       = "my-keypair"                        # existing EC2 key pair
+
+# Leave empty to open no inbound port and connect through SSM (recommended).
+# admin_cidrs = ["203.0.113.10/32"]
+
+workstations = {
+  alice = {
+    apps = {
+      "7zip"   = "24.08"
+      chrome   = "latest"
+      webview2 = "latest"
+      dbeaver  = "26.2.0" # installed with connections to her databases
+    }
+    databases = ["mysql"]
+  }
+
+  bob = {
+    apps = {
+      "7zip"          = "24.08"
+      notepadplusplus = "8.7"
+      odbc17          = "17.11"
+    }
+    databases = ["sqlserver"]
+  }
+}

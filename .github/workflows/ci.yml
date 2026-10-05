@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+      - name: Format
+        run: terraform fmt -check -recursive
+
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        root: [catalog, workstations]
+    defaults:
+      run:
+        working-directory: ${{ matrix.root }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.8
+      # -backend=false: validation needs no state and no AWS credentials.
+      - name: Init
+        run: terraform init -backend=false
+      - name: Validate
+        run: terraform validate
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
+      - name: Init plugins
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Lint
+        run: tflint --recursive --config "$GITHUB_WORKSPACE/.tflint.hcl"
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Misconfiguration scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: "1"
