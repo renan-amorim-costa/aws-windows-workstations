@@ -1,0 +1,10 @@
+# Accepted misconfigurations. Each entry states why, so the exception is a
+# decision on record and not a silenced scanner.
+
+# AVD-AWS-0132 - the catalog bucket does not use a customer managed KMS key.
+# The bucket holds public application installers, not secrets. Encryption is
+# on (SSE-S3/AES256), TLS is enforced by bucket policy, versioning is enabled
+# and every form of public access is blocked. A customer managed key bills per
+# key per month and buys nothing for artifacts anyone can download from the
+# vendor. Revisit if the catalog ever stores licensed or customer data.
+AVD-AWS-0132

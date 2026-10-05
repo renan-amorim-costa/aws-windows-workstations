@@ -162,6 +162,13 @@ gives each engine a name that never changes: `mysql.lab.internal`.
 stops `terraform plan` with a message that names it, instead of a workstation
 failing silently twenty minutes into its boot.
 
+**Encryption with the S3 default key, and the exception written down.** The
+catalog bucket is encrypted, TLS-only and fully private, but it uses the S3
+default key rather than a customer managed one - the objects are public vendor
+installers, and a managed key bills per month to protect something anyone can
+download. The security scan flags it, so the exception lives in `.trivyignore`
+with the reasoning instead of being switched off quietly.
+
 **No NAT gateway.** It bills by the hour and the databases never need the
 internet. Workstations take a public IP for outbound traffic instead; inbound
 stays closed unless `admin_cidrs` is set.
